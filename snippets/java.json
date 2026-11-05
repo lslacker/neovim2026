@@ -1,0 +1,22 @@
+{
+  "class": {
+    "prefix": "class",
+    "body": ["public class ${1:$TM_FILENAME_BASE} {", "\t$0", "}"],
+    "description": "Public class named after the file"
+  },
+  "record": {
+    "prefix": "record",
+    "body": ["public record ${1:$TM_FILENAME_BASE}(${2}) {", "\t$0", "}"],
+    "description": "Public record named after the file"
+  },
+  "enum": {
+    "prefix": "enum",
+    "body": ["public enum ${1:$TM_FILENAME_BASE} {", "\t${2:VALUE};$0", "}"],
+    "description": "Public enum named after the file"
+  },
+  "interface": {
+    "prefix": "interface",
+    "body": ["public interface ${1:$TM_FILENAME_BASE} {", "\t$0", "}"],
+    "description": "Public interface named after the file"
+  }
+}

@@ -6,10 +6,14 @@ vim.pack.add({
     "https://github.com/neovim/nvim-lspconfig",
     "https://github.com/mason-org/mason.nvim",
     "https://github.com/tpope/vim-fugitive",
+    "https://github.com/lewis6991/gitsigns.nvim",
     "https://github.com/Olical/conjure",
     "https://github.com/nvim-tree/nvim-web-devicons",
     "https://github.com/nvim-lualine/lualine.nvim",
     "https://github.com/windwp/nvim-autopairs",
+    "https://github.com/mfussenegger/nvim-jdtls",
+    "https://github.com/coder/claudecode.nvim",
+    "https://github.com/mfussenegger/nvim-dap"
 })
 
 
@@ -56,9 +60,49 @@ require("mini.surround").setup({})
 --- mini picker ----
 local MiniPick = require("mini.pick")
 local MiniExtra = require("mini.extra")
-MiniPick.setup()
+MiniPick.setup({
+    window = {
+        config = function()
+            local height = math.floor(0.6 * vim.o.lines)
+            local width = math.floor(0.85 * vim.o.columns)
+            return {
+                anchor = "NW",
+                height = height,
+                width = width,
+                row = math.floor(0.5 * (vim.o.lines - height)),
+                col = math.floor(0.5 * (vim.o.columns - width)),
+            }
+        end,
+    },
+})
 MiniExtra.setup()
-vim.keymap.set("n", "<leader>pf", function() MiniPick.builtin.files() end, { desc = "Mini File Picker" })
+
+-- Show "Filename.java  dir/shortened" so the name is readable for deep Java paths.
+-- Items stay full paths, so matching and choosing are unaffected.
+local pick_ns = vim.api.nvim_create_namespace("pick_name_first")
+local function show_name_first(buf_id, items, _)
+    local lines, name_lens = {}, {}
+    for i, item in ipairs(items) do
+        local path = tostring(item)
+        local name = vim.fn.fnamemodify(path, ":t")
+        local dir = vim.fn.fnamemodify(path, ":h")
+        dir = dir:gsub("^.*/src/main/java/", "…/"):gsub("^.*/src/test/java/", "…/test/")
+        lines[i] = dir == "." and name or (name .. "  " .. dir)
+        name_lens[i] = #name
+    end
+    vim.api.nvim_buf_set_lines(buf_id, 0, -1, false, lines)
+    vim.api.nvim_buf_clear_namespace(buf_id, pick_ns, 0, -1)
+    for i, len in ipairs(name_lens) do
+        if #lines[i] > len then
+            vim.api.nvim_buf_set_extmark(buf_id, pick_ns, i - 1, len, { end_col = #lines[i], hl_group = "Comment" })
+        end
+    end
+end
+
+vim.keymap.set("n", "<leader>pf", function()
+    MiniPick.builtin.files(nil, { source = { show = show_name_first } })
+end, { desc = "Mini File Picker" })
+vim.keymap.set('n', '<leader>pb', '<cmd>Pick buffers<cr>', { desc = 'Buffers' })
 vim.keymap.set("n", "<leader>ps", function() MiniPick.builtin.grep({ pattern = vim.fn.expand("<cword>") }) end, { desc = "Grep word/Search word" })
 vim.keymap.set("n", "<leader>vh", function() MiniPick.builtin.help() end, { desc = "Mini Help" })
 
@@ -101,11 +145,75 @@ vim.api.nvim_create_autocmd("ColorScheme", {
         vim.api.nvim_set_hl(0, "MiniSnippetsFinal", {})
         vim.api.nvim_set_hl(0, "MiniSnippetsUnvisited", {})
         vim.api.nvim_set_hl(0, "MiniSnippetsVisited", {})
+
+        -- Clearer selected row in mini.pick (default bg is barely visible on moonfly)
+        vim.api.nvim_set_hl(0, "MiniPickMatchCurrent", { bg = "#2f4f7f", fg = "#ffffff", bold = true })
+        vim.api.nvim_set_hl(0, "MiniPickMatchMarked", { bg = "#5a3f7f", bold = true })
+        vim.api.nvim_set_hl(0, "MiniPickMatchRanges", { fg = "#ffb86c", bold = true })
     end,
 })
+-- Apply now too, since the colorscheme is already loaded when this file runs
+vim.api.nvim_exec_autocmds("ColorScheme", {})
 
 require('mini.statusline').setup()
 
 require('nvim-autopairs').setup({
   disable_filetype = { "TelescopePrompt" , "vim" },
+})
+
+---- gitsigns ----
+-- Hunks use ]h/[h rather than the README's ]c/[c, which are Vim's own diff-mode
+-- motions used in fugitive's :Gdiffsplit (<leader>gd). Diffing is left to fugitive.
+require("gitsigns").setup({
+    on_attach = function(bufnr)
+        local gitsigns = require("gitsigns")
+        local function map(mode, lhs, rhs, desc)
+            vim.keymap.set(mode, lhs, rhs, { buffer = bufnr, desc = desc })
+        end
+        local function selected_lines()
+            return { vim.fn.line("."), vim.fn.line("v") }
+        end
+
+        map("n", "]h", function() gitsigns.nav_hunk("next") end, "Next git hunk")
+        map("n", "[h", function() gitsigns.nav_hunk("prev") end, "Previous git hunk")
+
+        map("n", "<leader>hp", gitsigns.preview_hunk, "Preview hunk")
+        map("n", "<leader>hi", gitsigns.preview_hunk_inline, "Preview hunk inline")
+        map("n", "<leader>hs", gitsigns.stage_hunk, "Stage/unstage hunk")
+        map("x", "<leader>hs", function() gitsigns.stage_hunk(selected_lines()) end, "Stage selected lines")
+        map("n", "<leader>hr", gitsigns.reset_hunk, "Reset hunk")
+        map("x", "<leader>hr", function() gitsigns.reset_hunk(selected_lines()) end, "Reset selected lines")
+        map("n", "<leader>hS", gitsigns.stage_buffer, "Stage buffer")
+        map("n", "<leader>hR", gitsigns.reset_buffer, "Reset buffer")
+        map("n", "<leader>hb", function() gitsigns.blame_line({ full = true }) end, "Blame line popup")
+        map("n", "<leader>hq", gitsigns.setqflist, "Hunks to quickfix")
+
+        map("n", "<leader>tb", gitsigns.toggle_current_line_blame, "Toggle inline blame")
+        map("n", "<leader>tw", gitsigns.toggle_word_diff, "Toggle word diff")
+
+        map({ "o", "x" }, "ih", gitsigns.select_hunk, "Inside hunk")
+    end,
+})
+
+
+---- claude code ----
+require("claudecode").setup({
+  terminal = { provider = "native" }, -- no snacks.nvim installed
+})
+
+vim.keymap.set("n", "<leader>ac", "<cmd>ClaudeCode<cr>", { desc = "Toggle Claude" })
+vim.keymap.set("n", "<leader>af", "<cmd>ClaudeCodeFocus<cr>", { desc = "Focus Claude" })
+vim.keymap.set("n", "<leader>ar", "<cmd>ClaudeCode --resume<cr>", { desc = "Resume Claude" })
+vim.keymap.set("n", "<leader>aC", "<cmd>ClaudeCode --continue<cr>", { desc = "Continue Claude" })
+vim.keymap.set("n", "<leader>am", "<cmd>ClaudeCodeSelectModel<cr>", { desc = "Select Claude model" })
+vim.keymap.set("n", "<leader>ab", "<cmd>ClaudeCodeAdd %<cr>", { desc = "Add current buffer to Claude" })
+vim.keymap.set("v", "<leader>as", "<cmd>ClaudeCodeSend<cr>", { desc = "Send selection to Claude" })
+vim.keymap.set("n", "<leader>aa", "<cmd>ClaudeCodeDiffAccept<cr>", { desc = "Accept Claude diff" })
+vim.keymap.set("n", "<leader>ad", "<cmd>ClaudeCodeDiffDeny<cr>", { desc = "Deny Claude diff" })
+
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = "minifiles",
+  callback = function()
+    vim.keymap.set("n", "<leader>as", "<cmd>ClaudeCodeTreeAdd<cr>", { buffer = true, desc = "Add file to Claude" })
+  end,
 })

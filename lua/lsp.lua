@@ -6,7 +6,7 @@ vim.keymap.set("n", "<leader>df", vim.diagnostic.open_float, { desc = "Show line
 
 vim.diagnostic.config({
     virtual_text = false,
-    virtual_lines = { current_line = true },
+    -- virtual_lines = { current_line = true },
     severity_sort = true,
 })
 

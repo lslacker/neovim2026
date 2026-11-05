@@ -57,3 +57,13 @@ vim.keymap.set("n", "<leader>gb", ":Git blame<CR>", { desc = "Git Blame Line" })
 -- Quick log timeline view
 vim.keymap.set("n", "<leader>gl", ":Git log --oneline<CR>", { desc = "Git Log Summary" })
 
+
+-- New file in the current file's directory (prompt pre-filled with the path)
+vim.keymap.set("n", "<leader>nf", function()
+    local dir = vim.fn.expand("%:p:h") .. "/"
+    vim.ui.input({ prompt = "New file: ", default = dir, completion = "file" }, function(path)
+        if not path or path == "" or path == dir then return end
+        vim.fn.mkdir(vim.fs.dirname(path), "p")
+        vim.cmd.edit(vim.fn.fnameescape(path))
+    end)
+end, { desc = "New file in current file's directory" })
